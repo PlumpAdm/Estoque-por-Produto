@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Estoque por Produto</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+html{color-scheme:light}body{margin:0}[hidden]{display:none!important}
+
+/* Layout: ferramenta de uma coluna — barra de arquivo, filtros, quatro números-resumo, tabela por produto que abre a grade cor × tamanho */
+:root{
+  --bg:#f6f4f7; --surface:#ffffff; --ink:#221a26; --muted:#6c6272; --line:#e3dde7;
+  --plum:#6e2b5e; --plum-soft:#f2e6ef; --on-plum:#ffffff;
+  --warn:#9a5b00; --warn-bg:#fcefd9; --bad:#b0281f; --bad-bg:#fbe6e3; --ok-bg:#eef6ef;
+  --f-display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body:"Instrument Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono:"JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#15111a; --surface:#1e1923; --ink:#eee8f1; --muted:#a79dac; --line:#352d3b;
+  --plum:#d78fc6; --plum-soft:#3a2436; --on-plum:#1b1219;
+  --warn:#e8b456; --warn-bg:#3a2b12; --bad:#f28a80; --bad-bg:#3e1d1a; --ok-bg:#1d2a20; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#15111a; --surface:#1e1923; --ink:#eee8f1; --muted:#a79dac; --line:#352d3b;
+  --plum:#d78fc6; --plum-soft:#3a2436; --on-plum:#1b1219;
+  --warn:#e8b456; --warn-bg:#3a2b12; --bad:#f28a80; --bad-bg:#3e1d1a; --ok-bg:#1d2a20; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45}
+.wrap{max-width:1180px;margin:0 auto;padding-block:28px 56px;padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));display:flex;flex-direction:column;gap:20px}
+h1{font-family:var(--f-display);font-weight:700;font-size:clamp(26px,4vw,34px);letter-spacing:-.01em;margin:0;text-wrap:balance}
+.top{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;justify-content:space-between}
+.top p{margin:4px 0 0;color:var(--muted);max-width:62ch}
+.drop{border:1.5px dashed var(--line);border-radius:10px;background:var(--surface);padding:14px 16px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;transition:border-color .15s, background .15s}
+.drop.over{border-color:var(--plum);background:var(--plum-soft)}
+.src{display:flex;flex-direction:column;gap:2px;min-width:0}
+.src b{font-weight:600}
+.src span{color:var(--muted);font-size:13px;overflow-wrap:anywhere}
+.tag{display:inline-block;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;background:var(--warn-bg);color:var(--warn);padding:2px 7px;border-radius:4px;margin-left:6px;vertical-align:1px}
+.btns{display:flex;gap:8px;flex-wrap:wrap}
+button,.filebtn{font:inherit;font-weight:600;font-size:14px;border-radius:8px;padding:9px 14px;cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+.primary{background:var(--plum);border-color:var(--plum);color:var(--on-plum)}
+button:focus-visible,.filebtn:focus-within,input:focus-visible,select:focus-visible{outline:2px solid var(--plum);outline-offset:2px}
+#file{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.controls{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+.controls input[type=search]{font:inherit;padding:9px 12px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);width:min(320px,100%)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface)}
+.seg button{border:0;border-radius:0;padding:8px 12px;font-weight:500;background:transparent}
+.seg button[aria-pressed="true"]{background:var(--plum);color:var(--on-plum)}
+.controls label{display:inline-flex;gap:7px;align-items:center;font-size:14px;cursor:pointer}
+.controls select,.controls input[type=number]{font:inherit;padding:7px 8px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+.controls input[type=number]{width:58px}
+.small{color:var(--muted);font-size:13px}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+@media (max-width:760px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:2px}
+.kpi .l{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.kpi .v{font-family:var(--f-display);font-weight:700;font-size:28px;font-variant-numeric:tabular-nums;line-height:1.15}
+.kpi .s{font-size:13px;color:var(--muted)}
+.tablebox{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{padding:10px 14px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);position:relative}
+th button{all:unset;cursor:pointer;display:inline-flex;gap:4px;align-items:center}
+th button:focus-visible{outline:2px solid var(--plum);outline-offset:2px}
+th.num,td.num{text-align:right}
+th.num button{justify-content:flex-end}
+tr.main{cursor:pointer}
+tr.main:hover td{background:var(--plum-soft)}
+tr.main td:first-child{width:28px;padding-right:0;color:var(--muted)}
+.caret{display:inline-block;transition:transform .15s}
+tr.open .caret{transform:rotate(90deg)}
+.code{font-family:var(--f-mono);font-size:13px;color:var(--muted)}
+.name{font-weight:600;white-space:normal;min-width:180px}
+.big{font-weight:600;font-size:16px}
+.pill{display:inline-block;font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px}
+.pill.bad{background:var(--bad-bg);color:var(--bad)}
+.pill.ok{background:var(--ok-bg);color:var(--muted)}
+.pill.zero{background:var(--bad-bg);color:var(--bad)}
+tr.detail td{background:var(--bg);padding:14px 14px 18px 42px;white-space:normal}
+.grid{border-collapse:separate;border-spacing:3px;width:auto}
+.grid th,.grid td{border:0;padding:6px 10px;text-align:center;min-width:46px}
+.grid th{font-size:12px}
+.grid th.row{text-align:left;text-transform:none;letter-spacing:0;font-size:14px;color:var(--ink);font-weight:500}
+.grid td{background:var(--surface);border-radius:5px;font-weight:500}
+.grid td.z{background:var(--bad-bg);color:var(--bad)}
+.grid td.low{background:var(--warn-bg);color:var(--warn)}
+.grid td.na{background:transparent;color:var(--muted)}
+.grid td.tot,.grid th.tot{font-weight:700;background:transparent}
+.legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:var(--muted)}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-2px;margin-right:5px}
+.empty{padding:36px 16px;text-align:center;color:var(--muted)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom, 0px));background:var(--ink);color:var(--bg);padding:9px 14px;border-radius:8px;font-size:14px;font-weight:500}
+.err{color:var(--bad);font-size:14px}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="top">
+    <div>
+      <h1>Estoque por Produto</h1>
+      <p>Solte aqui a exportação da Lista de Estoque do UpSeller (.xlsx). As variações são somadas pelo código do produto (os 5 primeiros dígitos do SKU) e cada produto abre a grade de cor × tamanho.</p>
+    </div>
+  </div>
+
+  <div class="drop" id="drop">
+    <div class="src">
+      <b id="srcName">Exemplo carregado<span class="tag">exemplo</span></b>
+      <span id="srcInfo">Dados fictícios. Carregue a exportação da Lista de Estoque do UpSeller para ver os seus produtos.</span>
+      <span class="err" id="err" hidden></span>
+    </div>
+    <div class="btns">
+      <label class="filebtn primary" for="file">Carregar arquivo<input type="file" id="file" accept=".xlsx,.xls,.csv" multiple></label>
+      <button id="copy" type="button">Copiar tabela</button>
+    </div>
+  </div>
+
+  <div class="controls">
+    <input type="search" id="q" placeholder="Buscar por nome ou código" aria-label="Buscar produto">
+    <div class="seg" role="group" aria-label="Quantidade usada">
+      <button type="button" id="mDisp" aria-pressed="true">Disponível</button>
+      <button type="button" id="mAtual" aria-pressed="false">Estoque atual</button>
+    </div>
+    <label><input type="checkbox" id="gaps"> Só grade quebrada</label>
+    <label><input type="checkbox" id="hideEmpty"> Ocultar produtos sem estoque</label>
+    <label id="whWrap" hidden>Armazém <select id="wh"></select></label>
+    <label class="small">Dígitos do código <input type="number" id="prefix" min="2" max="12" value="5"></label>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi"><span class="l">Produtos</span><span class="v" id="kProd">0</span><span class="s" id="kProdS"></span></div>
+    <div class="kpi"><span class="l">Peças</span><span class="v" id="kQty">0</span><span class="s" id="kQtyS"></span></div>
+    <div class="kpi"><span class="l">Valor em estoque</span><span class="v" id="kVal">R$ 0</span><span class="s">pelo custo médio</span></div>
+    <div class="kpi"><span class="l">Grade quebrada</span><span class="v" id="kGap">0</span><span class="s">produtos com estoque e algum tamanho zerado</span></div>
+  </div>
+
+  <div class="tablebox">
+    <table>
+      <thead><tr>
+        <th aria-label="Abrir"></th>
+        <th><button data-sort="code">Código</button></th>
+        <th><button data-sort="name">Produto</button></th>
+        <th class="num"><button data-sort="qty">Peças</button></th>
+        <th class="num"><button data-sort="vars">Variações</button></th>
+        <th class="num"><button data-sort="zeros">Zeradas</button></th>
+        <th class="num"><button data-sort="value">Valor</button></th>
+      </tr></thead>
+      <tbody id="tb"></tbody>
+    </table>
+  </div>
+  <p class="small">Clique num produto para ver a grade. Peças com 1 ou 2 unidades aparecem em amarelo; zeradas em vermelho. Nada é enviado para fora: o arquivo é lido só no seu navegador.</p>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const SAMPLE = [["09001014","VEST EXEMPLO A - (Preto, GG)","My Warehouse","0","6","6","35.0","210.00"],["09001016","VEST EXEMPLO A - (Preto, G1)","My Warehouse","0","12","12","35.0","420.00"],["09001017","VEST EXEMPLO A - (Preto, G2)","My Warehouse","0","9","9","35.0","315.00"],["09001018","VEST EXEMPLO A - (Preto, G3)","My Warehouse","0","4","4","35.0","140.00"],["09001019","VEST EXEMPLO A - (Preto, G4)","My Warehouse","0","2","2","35.0","70.00"],["09001024","VEST EXEMPLO A - (Azul, GG)","My Warehouse","0","0","0","",""],["09001026","VEST EXEMPLO A - (Azul, G1)","My Warehouse","0","7","7","35.0","245.00"],["09001027","VEST EXEMPLO A - (Azul, G2)","My Warehouse","0","5","5","35.0","175.00"],["09001028","VEST EXEMPLO A - (Azul, G3)","My Warehouse","0","3","3","35.0","105.00"],["09001029","VEST EXEMPLO A - (Azul, G4)","My Warehouse","0","0","0","",""],["09002016","CONJ EXEMPLO B - (Bege, G1)","My Warehouse","0","10","10","52.0","520.00"],["09002017","CONJ EXEMPLO B - (Bege, G2)","My Warehouse","0","14","14","52.0","728.00"],["09002018","CONJ EXEMPLO B - (Bege, G3)","My Warehouse","0","11","11","52.0","572.00"],["09002019","CONJ EXEMPLO B - (Bege, G4)","My Warehouse","0","8","8","52.0","416.00"],["09002026","CONJ EXEMPLO B - (Verde, G1)","My Warehouse","0","6","6","52.0","312.00"],["09002027","CONJ EXEMPLO B - (Verde, G2)","My Warehouse","0","9","9","52.0","468.00"],["09002028","CONJ EXEMPLO B - (Verde, G3)","My Warehouse","0","7","7","52.0","364.00"],["09002029","CONJ EXEMPLO B - (Verde, G4)","My Warehouse","0","5","5","52.0","260.00"],["09003014","CAMISA EXEMPLO C - (Branco, GG)","My Warehouse","0","0","0","",""],["09003016","CAMISA EXEMPLO C - (Branco, G1)","My Warehouse","0","0","0","",""],["09003017","CAMISA EXEMPLO C - (Branco, G2)","My Warehouse","0","0","0","",""],["09003018","CAMISA EXEMPLO C - (Branco, G3)","My Warehouse","0","0","0","",""]]; // [sku, titulo, armazem, ocupado, disponivel, atual, custo, subtotal]
+
+const $ = id => document.getElementById(id);
+const fmtInt = n => Math.round(n).toLocaleString('pt-BR');
+const fmtBRL = n => n.toLocaleString('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0});
+const norm = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
+
+function num(v){
+  if (v == null || v === '') return 0;
+  if (typeof v === 'number') return v;
+  let s = String(v).trim().replace(/\s/g,'').replace(/^R\$/,'');
+  if (/^-?\d{1,3}(\.\d{3})+(,\d+)?$/.test(s)) s = s.replace(/\./g,'').replace(',','.');
+  else if (/^-?\d+,\d+$/.test(s)) s = s.replace(',','.');
+  else s = s.replace(/,/g,'');
+  const n = parseFloat(s);
+  return isNaN(n) ? 0 : n;
+}
+const titleCase = s => s.toLowerCase().replace(/(^|\s)\S/g, c => c.toUpperCase());
+
+function parseTitle(title, sku){
+  const t = String(title || '').trim();
+  const m = t.match(/^(.*?)\s*\(([^()]*)\)\s*$/);
+  if (!m) return { name: t || sku, color: '—', size: sku };
+  const name = m[1].replace(/[\s\-–—:]+$/,'').trim();
+  const parts = m[2].split(',').map(x => x.trim()).filter(Boolean);
+  let color = '—', size = '—';
+  if (parts.length >= 2){ color = parts.slice(0,-1).join(', '); size = parts[parts.length-1]; }
+  else if (parts.length === 1){ if (isSize(parts[0])) size = parts[0]; else color = parts[0]; }
+  return { name: name || sku, color: color === '—' ? color : titleCase(color), size: size.toUpperCase() };
+}
+const SIZE_ORDER = ['PP','P','M','G','GG','XG','XGG','EG','EGG','EXG','G1','G2','G3','G4','G5','G6','G7','U','UN','UNICO','ÚNICO'];
+function isSize(s){ const u = String(s).toUpperCase(); return SIZE_ORDER.includes(u) || /^\d{2}$/.test(u); }
+function sizeRank(s){
+  const u = String(s).toUpperCase();
+  const i = SIZE_ORDER.indexOf(u);
+  if (i >= 0) return i;
+  if (/^\d+$/.test(u)) return 100 + parseInt(u,10);
+  return 1000;
+}
+const sortSizes = arr => arr.sort((a,b) => sizeRank(a) - sizeRank(b) || a.localeCompare(b,'pt-BR'));
+
+// ---------- leitura do arquivo ----------
+const COLS = {
+  sku:['sku'], title:['titulo','title','nome do produto','nome'], wh:['armazem','warehouse'],
+  ocup:['ocupado'], disp:['disponivel'], atual:['estoque atual'], custo:['custo medio','custo'], sub:['subtotal']
+};
+function findCol(headers, keys){
+  const H = headers.map(norm);
+  for (const k of keys){ const i = H.indexOf(k); if (i >= 0) return headers[i]; }
+  for (const k of keys){ const i = H.findIndex(h => h.startsWith(k)); if (i >= 0) return headers[i]; }
+  return null;
+}
+function recordsFromSheet(ws){
+  const rows = XLSX.utils.sheet_to_json(ws, { raw:false, defval:'' });
+  if (!rows.length) return [];
+  const headers = Object.keys(rows[0]);
+  const c = {}; for (const k in COLS) c[k] = findCol(headers, COLS[k]);
+  if (!c.sku || (!c.disp && !c.atual)) throw new Error('não encontrei as colunas "SKU" e "Disponível"/"Estoque Atual". Use a exportação da Lista de Estoque do UpSeller.');
+  return rows.map(r => toRec([r[c.sku], c.title ? r[c.title] : '', c.wh ? r[c.wh] : '', c.ocup ? r[c.ocup] : 0,
+    c.disp ? r[c.disp] : r[c.atual], c.atual ? r[c.atual] : r[c.disp], c.custo ? r[c.custo] : 0, c.sub ? r[c.sub] : '']))
+    .filter(Boolean);
+}
+function toRec(a){
+  const sku = String(a[0] ?? '').trim();
+  if (!sku) return null;
+  const p = parseTitle(a[1], sku);
+  const atual = num(a[5]), custo = num(a[6]);
+  const subRaw = String(a[7] ?? '').trim();
+  return { sku, title:String(a[1]||''), wh:String(a[2]||'').trim() || '—', ocup:num(a[3]), disp:num(a[4]), atual,
+    value: subRaw !== '' ? num(subRaw) : atual * custo, ...p };
+}
+
+// ---------- estado ----------
+const store = { get(k,d){ try{ const v = localStorage.getItem('estq:'+k); return v == null ? d : JSON.parse(v); }catch(e){ return d; } },
+                set(k,v){ try{ localStorage.setItem('estq:'+k, JSON.stringify(v)); }catch(e){} } };
+const S = { recs: SAMPLE.map(toRec).filter(Boolean), metric: store.get('metric','disp'), q:'', gaps:false, hideEmpty:false,
+            wh:'', prefix: store.get('prefix',5), sort:{key:'qty',dir:-1}, open:new Set(), products:[] };
+
+function group(){
+  const recs = S.recs.filter(r => !S.wh || r.wh === S.wh);
+  const map = new Map();
+  for (const r of recs){
+    const key = r.sku.slice(0, S.prefix);
+    let g = map.get(key);
+    if (!g){ g = { code:key, names:new Map(), qty:0, value:0, vars:0, zeros:0, cells:new Map(), colors:new Set(), sizes:new Set(), skus:[] }; map.set(key,g); }
+    const q = r[S.metric];
+    g.names.set(r.name, (g.names.get(r.name)||0) + 1);
+    g.qty += q; g.value += r.value; g.vars++; if (q <= 0) g.zeros++;
+    const ck = r.color + '\u0001' + r.size;
+    g.cells.set(ck, (g.cells.get(ck)||0) + q);
+    g.colors.add(r.color); g.sizes.add(r.size); g.skus.push(r.sku);
+  }
+  S.products = [...map.values()].map(g => {
+    g.name = [...g.names.entries()].sort((a,b) => b[1]-a[1])[0][0];
+    g.gap = g.qty > 0 && g.zeros > 0;
+    return g;
+  });
+}
+
+function visible(){
+  const q = norm(S.q);
+  let list = S.products.filter(p =>
+    (!q || norm(p.name).includes(q) || p.code.includes(q) || p.skus.some(s => s.includes(q))) &&
+    (!S.gaps || p.gap) && (!S.hideEmpty || p.qty > 0));
+  const {key, dir} = S.sort;
+  list.sort((a,b) => {
+    const x = a[key], y = b[key];
+    const c = typeof x === 'string' ? x.localeCompare(y,'pt-BR') : x - y;
+    return c * dir || a.code.localeCompare(b.code);
+  });
+  return list;
+}
+
+function esc(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+function gridHTML(p){
+  const sizes = sortSizes([...p.sizes]);
+  const colors = [...p.colors].sort((a,b) => a.localeCompare(b,'pt-BR'));
+  let h = '<table class="grid"><thead><tr><th></th>' + sizes.map(s => `<th>${esc(s)}</th>`).join('') + '<th class="tot">Total</th></tr></thead><tbody>';
+  const colTot = Object.fromEntries(sizes.map(s => [s,0]));
+  for (const c of colors){
+    let rt = 0;
+    h += `<tr><th class="row">${esc(c)}</th>`;
+    for (const s of sizes){
+      const k = c + '\u0001' + s;
+      if (!p.cells.has(k)){ h += '<td class="na">·</td>'; continue; }
+      const v = p.cells.get(k); rt += v; colTot[s] += v;
+      h += `<td class="${v <= 0 ? 'z' : v <= 2 ? 'low' : ''}">${fmtInt(v)}</td>`;
+    }
+    h += `<td class="tot">${fmtInt(rt)}</td></tr>`;
+  }
+  h += '<tr><th class="row tot">Total</th>' + sizes.map(s => `<td class="tot">${fmtInt(colTot[s])}</td>`).join('') + `<td class="tot">${fmtInt(p.qty)}</td></tr>`;
+  h += '</tbody></table><div class="legend"><span><i style="background:var(--bad-bg)"></i>zerado</span><span><i style="background:var(--warn-bg)"></i>1 a 2 peças</span><span>· não existe essa combinação</span></div>';
+  return h;
+}
+
+function render(){
+  const list = visible();
+  const tb = $('tb');
+  if (!list.length){
+    tb.innerHTML = `<tr><td colspan="7" class="empty">${S.products.length ? 'Nenhum produto com esses filtros.' : 'Nenhuma linha com SKU encontrada no arquivo.'}</td></tr>`;
+  } else {
+    tb.innerHTML = list.map(p => {
+      const open = S.open.has(p.code);
+      return `<tr class="main${open ? ' open' : ''}" data-code="${esc(p.code)}" tabindex="0" aria-expanded="${open}">
+        <td><span class="caret">›</span></td>
+        <td class="code">${esc(p.code)}</td>
+        <td class="name">${esc(p.name)}</td>
+        <td class="num big">${fmtInt(p.qty)}</td>
+        <td class="num">${p.vars}</td>
+        <td class="num">${p.zeros ? `<span class="pill ${p.qty > 0 ? 'bad' : 'zero'}">${p.zeros}</span>` : '<span class="pill ok">0</span>'}</td>
+        <td class="num">${fmtBRL(p.value)}</td></tr>` +
+        (open ? `<tr class="detail"><td colspan="7">${gridHTML(p)}</td></tr>` : '');
+    }).join('');
+  }
+  const tq = list.reduce((a,p) => a + p.qty, 0), tv = list.reduce((a,p) => a + p.value, 0);
+  const withStock = list.filter(p => p.qty > 0).length;
+  $('kProd').textContent = fmtInt(list.length);
+  $('kProdS').textContent = `${fmtInt(withStock)} com estoque`;
+  $('kQty').textContent = fmtInt(tq);
+  $('kQtyS').textContent = S.metric === 'disp' ? 'disponível para venda' : 'estoque atual (inclui ocupado)';
+  $('kVal').textContent = fmtBRL(tv);
+  $('kGap').textContent = fmtInt(list.filter(p => p.gap).length);
+  document.querySelectorAll('th button').forEach(b => {
+    const on = b.dataset.sort === S.sort.key;
+    b.textContent = b.textContent.replace(/ [↑↓]$/,'') + (on ? (S.sort.dir > 0 ? ' ↑' : ' ↓') : '');
+  });
+}
+
+function refreshWh(){
+  const whs = [...new Set(S.recs.map(r => r.wh))].sort();
+  $('whWrap').hidden = whs.length < 2;
+  $('wh').innerHTML = '<option value="">Todos</option>' + whs.map(w => `<option>${esc(w)}</option>`).join('');
+  if (!whs.includes(S.wh)) S.wh = '';
+  $('wh').value = S.wh;
+}
+function update(){ group(); render(); }
+
+// ---------- eventos ----------
+function setMetric(m){ S.metric = m; store.set('metric', m); $('mDisp').setAttribute('aria-pressed', m === 'disp'); $('mAtual').setAttribute('aria-pressed', m === 'atual'); update(); }
+$('mDisp').onclick = () => setMetric('disp');
+$('mAtual').onclick = () => setMetric('atual');
+$('q').oninput = e => { S.q = e.target.value; render(); };
+$('gaps').onchange = e => { S.gaps = e.target.checked; render(); };
+$('hideEmpty').onchange = e => { S.hideEmpty = e.target.checked; render(); };
+$('wh').onchange = e => { S.wh = e.target.value; update(); };
+$('prefix').value = S.prefix;
+$('prefix').onchange = e => { const v = Math.min(12, Math.max(2, parseInt(e.target.value,10) || 5)); e.target.value = v; S.prefix = v; store.set('prefix', v); S.open.clear(); update(); };
+document.querySelectorAll('th button').forEach(b => b.onclick = () => {
+  const k = b.dataset.sort;
+  S.sort = S.sort.key === k ? { key:k, dir:-S.sort.dir } : { key:k, dir: (k === 'code' || k === 'name') ? 1 : -1 };
+  render();
+});
+function toggle(tr){ const c = tr.dataset.code; S.open.has(c) ? S.open.delete(c) : S.open.add(c); render(); }
+$('tb').addEventListener('click', e => { const tr = e.target.closest('tr.main'); if (tr) toggle(tr); });
+$('tb').addEventListener('keydown', e => { const tr = e.target.closest('tr.main'); if (tr && (e.key === 'Enter' || e.key === ' ')){ e.preventDefault(); toggle(tr); const n = document.querySelector(`tr.main[data-code="${tr.dataset.code}"]`); n && n.focus(); } });
+
+function toast(msg){ const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toast.h); toast.h = setTimeout(() => t.hidden = true, 2200); }
+$('copy').onclick = () => {
+  const list = visible();
+  const tsv = ['Código\tProduto\tPeças\tVariações\tZeradas\tValor']
+    .concat(list.map(p => [p.code, p.name, Math.round(p.qty), p.vars, p.zeros, p.value.toFixed(2).replace('.',',')].join('\t'))).join('\n');
+  const ok = () => toast(`${list.length} produtos copiados. Cole no Excel.`);
+  const fallback = () => { const ta = document.createElement('textarea'); ta.value = tsv; document.body.appendChild(ta); ta.select(); try{ document.execCommand('copy'); ok(); }catch(e){ toast('Não consegui copiar. Selecione a tabela e copie manualmente.'); } ta.remove(); };
+  try { navigator.clipboard.writeText(tsv).then(ok, fallback); } catch(e){ fallback(); }
+};
+
+async function loadFiles(files){
+  $('err').hidden = true;
+  const all = []; const names = [];
+  try{
+    for (const f of files){
+      const buf = await f.arrayBuffer();
+      const wb = XLSX.read(buf, { type:'array' });
+      let got = [];
+      for (const sn of wb.SheetNames){ try{ got = got.concat(recordsFromSheet(wb.Sheets[sn])); }catch(e){ if (wb.SheetNames.length === 1) throw e; } }
+      if (!got.length) throw new Error(`"${f.name}" não tem linhas de estoque.`);
+      all.push(...got); names.push(f.name);
+    }
+  }catch(e){
+    $('err').textContent = 'Não foi possível ler o arquivo: ' + (e.message || e);
+    $('err').hidden = false; return;
+  }
+  // um SKU por armazém; se o mesmo SKU vier em dois arquivos, vale o último
+  const m = new Map(); for (const r of all) m.set(r.sku + '|' + r.wh, r);
+  S.recs = [...m.values()]; S.open.clear();
+  $('srcName').textContent = names.length === 1 ? names[0] : `${names.length} arquivos`;
+  $('srcInfo').textContent = `${fmtInt(S.recs.length)} variações (SKUs) lidas · carregado às ${new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}` + (names.length > 1 ? ' · ' + names.join(', ') : '');
+  refreshWh(); update();
+}
+$('file').onchange = e => { if (e.target.files.length) loadFiles([...e.target.files]); e.target.value = ''; };
+const drop = $('drop');
+['dragenter','dragover'].forEach(t => document.addEventListener(t, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave','drop'].forEach(t => document.addEventListener(t, e => { e.preventDefault(); if (t === 'drop' || e.target === document.documentElement) drop.classList.remove('over'); }));
+document.addEventListener('drop', e => { const f = [...(e.dataTransfer?.files || [])]; if (f.length) loadFiles(f); });
+
+setMetric(S.metric === 'atual' ? 'atual' : 'disp');
+refreshWh(); update();
+</script>
+
+</body>
+</html>
