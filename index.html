@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>(function(){var t='dark';try{t=JSON.parse(localStorage.getItem('estq:theme'))||'dark'}catch(e){}document.documentElement.setAttribute('data-theme',t==='light'?'light':'dark')})();</script>
 <style>
 html{color-scheme:light}body{margin:0}[hidden]{display:none!important}
 
@@ -105,6 +106,7 @@ tr.detail td{background:var(--bg);padding:14px 14px 18px 42px;white-space:normal
       <h1>Estoque por Produto</h1>
       <p>Solte aqui a exportação da Lista de Estoque do UpSeller (.xlsx). As variações são somadas pelo código do produto (os 5 primeiros dígitos do SKU) e cada produto abre a grade de cor × tamanho.</p>
     </div>
+    <button type="button" id="themeBtn">☀ Tema claro</button>
   </div>
 
   <div class="drop" id="drop">
@@ -393,6 +395,9 @@ const drop = $('drop');
 ['dragleave','drop'].forEach(t => document.addEventListener(t, e => { e.preventDefault(); if (t === 'drop' || e.target === document.documentElement) drop.classList.remove('over'); }));
 document.addEventListener('drop', e => { const f = [...(e.dataTransfer?.files || [])]; if (f.length) loadFiles(f); });
 
+function applyTheme(t){ document.documentElement.setAttribute('data-theme', t); $('themeBtn').textContent = t === 'dark' ? '☀ Tema claro' : '☾ Tema escuro'; }
+applyTheme(document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark');
+$('themeBtn').onclick = () => { const t = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'; applyTheme(t); store.set('theme', t); };
 setMetric(S.metric === 'atual' ? 'atual' : 'disp');
 refreshWh(); update();
 </script>
