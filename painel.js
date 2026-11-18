@@ -44,7 +44,7 @@
       return fetch('/api/warehouse-sku/list', {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json', 'Accept': 'application/json, text/plain, */*' },
-        body: JSON.stringify({ searchType: type, searchValue: q.replace(/\s+/g, type === '1' ? '' : ' '), vagueSearchType: 3, sortName: '0', sortValue: '0', pageNum: page, pageSize: 100 })
+        body: JSON.stringify({ searchType: type, searchValue: type === '1' ? q.replace(/\s+/g, '').slice(0, 5) : q.replace(/\s+/g, ' '), vagueSearchType: 3, sortName: '0', sortValue: '0', pageNum: page, pageSize: 100 })
       }).then(function (r) {
         if (r.status === 401 || r.status === 403) throw new Error('Sua sessão do UpSeller expirou. Faça login de novo e tente outra vez.');
         if (!r.ok) throw new Error('O UpSeller respondeu com erro ' + r.status + '. Tente de novo em instantes.');

@@ -95,6 +95,9 @@ tr.detail td{background:var(--bg);padding:14px 14px 18px 42px;white-space:normal
 .empty{padding:36px 16px;text-align:center;color:var(--muted)}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom, 0px));background:var(--ink);color:var(--bg);padding:9px 14px;border-radius:8px;font-size:14px;font-weight:500}
 .err{color:var(--bad);font-size:14px}
+.live{border:1px solid var(--plum);border-radius:10px;background:var(--plum-soft);padding:14px 16px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}
+.live .src span{max-width:70ch}
+.bm{display:inline-block;font-weight:600;font-size:14px;text-decoration:none;border-radius:8px;padding:9px 14px;background:var(--plum);color:var(--on-plum);cursor:grab;white-space:nowrap}
 .nocost{margin:10px 0 0;font-size:13px;color:var(--warn)}
 .warnmark{color:var(--warn);font-weight:700;margin-left:3px;cursor:help}
 .grid th:first-child{color:var(--muted);font-size:11px;text-align:left}
@@ -110,6 +113,14 @@ tr.detail td{background:var(--bg);padding:14px 14px 18px 42px;white-space:normal
       <p>Solte aqui a exportação da Lista de Estoque do UpSeller (.xlsx). As variações são somadas pelo código do produto (os 5 primeiros dígitos do SKU) e cada produto abre a grade de cor × tamanho.</p>
     </div>
     <button type="button" id="themeBtn">☀ Tema claro</button>
+  </div>
+
+  <div class="live">
+    <div class="src">
+      <b>Consulta ao vivo no UpSeller</b>
+      <span>Arraste o botão para a barra de favoritos do Chrome (Ctrl+Shift+B mostra a barra). Com o UpSeller aberto e logado, clique no favorito: abre um painel onde você digita o SKU, o código ou o nome do produto e vê o estoque na hora, sem exportar.</span>
+    </div>
+    <a class="bm" href="javascript:(function(){if(location.hostname!=='app.upseller.com'){location.href='https://app.upseller.com/pt/inventory/list?warehouseId=';return}var s=document.createElement('script');s.src='https://plumpadm.github.io/Estoque-por-Produto/painel.js?v='+Date.now();document.body.appendChild(s)})()" title="Arraste para a barra de favoritos">Estoque UpSeller</a>
   </div>
 
   <div class="drop" id="drop">
