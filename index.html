@@ -197,7 +197,7 @@ const titleCase = s => s.toLowerCase().replace(/(^|\s)\S/g, c => c.toUpperCase()
 function parseTitle(title, sku){
   const t = String(title || '').trim();
   const m = t.match(/^(.*?)\s*\(([^()]*)\)\s*$/);
-  if (!m) return { name: t || sku, color: '—', size: sku };
+  if (!m) return { name: t || sku, color: '—', size: sku, noParen: true };
   const name = m[1].replace(/[\s\-–—:]+$/,'').trim();
   const parts = m[2].split(',').map(x => x.trim()).filter(Boolean);
   let color = '—', size = '—';
@@ -211,7 +211,7 @@ function parseTitle(title, sku){
   }
   return { name: name || sku, color: color === '—' ? color : titleCase(color), size: size.toUpperCase() };
 }
-const SIZE_ORDER = ['PP','P','M','G','GG','XG','XGG','EG','EGG','EXG','G1','G2','G3','G4','G5','G6','G7','U','UN','UNICO','ÚNICO'];
+const SIZE_ORDER = ['PP','P','P-M','M','M-G','G','GG','GGG','XG','XGG','EG','EGG','EXG','G1','G2','G3','G4','G5','G6','G7','U','UN','UNICO','ÚNICO'];
 function isSize(s){ const u = String(s).toUpperCase(); return SIZE_ORDER.includes(u) || /^\d{2}$/.test(u); }
 function sizeRank(s){
   const u = String(s).toUpperCase();
@@ -221,6 +221,47 @@ function sizeRank(s){
   return 1000;
 }
 const sortSizes = arr => arr.sort((a,b) => sizeRank(a) - sizeRank(b) || a.localeCompare(b,'pt-BR'));
+
+var SKU_COR = {'002':'Preto','004':'Verde','005':'Azul','006':'Pink','007':'Areia','008':'Rosa','010':'Branco','011':'Laranja','013':'Lilás','014':'Vermelho','017':'Roxo','018':'Rosa','019':'Caqui','021':'Amarelo','025':'Linho','027':'Terra Cota','028':'Creme','029':'Bege','030':'Cinza','035':'Azul Marinho','037':'Marrom','045':'Marrom Claro','054':'Marrom Escuro','081':'Bege','084':'Marsala','085':'Grafite','114':'Salmão','116':'Pêssego','123':'Marrom','124':'Off','126':'Salmão','144':'Off-white','157':'Estan Azul','158':'Estan Vermelho','163':'Chocolate','169':'Verde Claro','170':'Verde Menta','199':'Azul Novo','251':'Azul Claro'};
+var SKU_TAM = {'44':'44','46':'46','48':'48','50':'50','52':'52','61':'P','62':'M','63':'G','64':'GG','66':'G1','67':'G2','68':'G3','69':'G4','70':'G5','71':'G6','72':'G7'};
+function decodeSku(sku) {
+  if (!/^\d{10}$/.test(sku)) return { color: '—', size: sku };
+  var c = sku.slice(5, 8), s = sku.slice(8, 10);
+  return { color: SKU_COR[c] || ('Cor ' + c), size: SKU_TAM[s] || ('Tam. ' + s) };
+}
+function refineNoParen(recs, plen) {
+  var SEP = /^[-–—:|\/,]+$/, by = {};
+  recs.forEach(function (r) { if (r.noParen) { var k = r.sku.slice(0, plen); (by[k] = by[k] || []).push(r); } });
+  Object.keys(by).forEach(function (k) {
+    var list = by[k], n = 0;
+    var words = list.map(function (r) { return String(r.title || '').trim().split(/\s+/); });
+    if (list.length > 1) {
+      var min = Math.min.apply(null, words.map(function (w) { return w.length; }));
+      while (n < min && words.every(function (w) { return w[n].toUpperCase() === words[0][n].toUpperCase(); })) n++;
+    }
+    list.forEach(function (r, i) {
+      var w = words[i], nameW, restW;
+      if (list.length > 1) { nameW = w.slice(0, n); restW = w.slice(n); }
+      else {
+        var d = w.lastIndexOf('-');
+        if (d > 0) { nameW = w.slice(0, d); restW = w.slice(d + 1); }
+        else if (w.length > 1 && isSize(w[w.length - 1])) { nameW = w.slice(0, -1); restW = w.slice(-1); }
+        else { nameW = w; restW = []; }
+      }
+      while (nameW.length && SEP.test(nameW[nameW.length - 1])) nameW.pop();
+      var rest = restW.join(' ').replace(/^[-–—:|\/,\s]+|[-–—:|\/,\s]+$/g, '');
+      var color = '—', size = '—', cp = rest.split(/\s*,\s*/);
+      if (cp.length >= 2 && isSize(cp[cp.length - 1])) { size = cp.pop().toUpperCase(); color = titleCase(cp.join(', ')); }
+      else {
+        var rw = rest ? rest.split(/\s+/) : [];
+        if (rw.length && isSize(rw[rw.length - 1])) size = rw.pop().toUpperCase();
+        if (rw.length) color = titleCase(rw.join(' '));
+      }
+      if (color === '—' && size === '—') { var dk = decodeSku(r.sku); color = dk.color; size = dk.size; r.fromSku = true; }
+      r.name = nameW.join(' ') || r.title || r.sku; r.color = color; r.size = size;
+    });
+  });
+}
 
 // ---------- leitura do arquivo ----------
 const COLS = {
@@ -261,6 +302,7 @@ const S = { recs: SAMPLE.map(toRec).filter(Boolean), metric: store.get('metric',
 
 function group(){
   const recs = S.recs.filter(r => !S.wh || r.wh === S.wh);
+  refineNoParen(recs, S.prefix);
   const map = new Map();
   for (const r of recs){
     const key = r.sku.slice(0, S.prefix);
@@ -299,6 +341,9 @@ function esc(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt
 function gridHTML(p){
   const sizes = sortSizes([...p.sizes]);
   const colors = [...p.colors].sort((a,b) => a.localeCompare(b,'pt-BR'));
+  if (colors.length === 1 && colors[0] === '—' && sizes.every(s => /^\d{6,}$/.test(s))) {
+    return '<p class="nocost" style="color:var(--muted);margin:0 0 6px">O título destas variações não traz cor e tamanho. Estoque por SKU:</p><table class="grid"><tbody>' + sizes.map(s => { const v = p.cells.get('—\u0001' + s) || 0; return `<tr><th class="row">${esc(s)}</th><td class="${v <= 0 ? 'z' : v <= 2 ? 'low' : ''}">${fmtInt(v)}</td></tr>`; }).join('') + `<tr><th class="row tot">Total</th><td class="tot">${fmtInt(p.qty)}</td></tr></tbody></table>`;
+  }
   let h = '<table class="grid"><thead><tr><th>Cor \\ Tam.</th>' + sizes.map(s => `<th>${esc(s)}</th>`).join('') + '<th class="tot">Total</th></tr></thead><tbody>';
   const colTot = Object.fromEntries(sizes.map(s => [s,0]));
   for (const c of colors){

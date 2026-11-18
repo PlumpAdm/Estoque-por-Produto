@@ -10,7 +10,7 @@
   if (old) { old.remove(); return; }
 
   // ---------- leitura do título: "NOME (COR TAM)" ou "NOME - (Cor, Tam)" ----------
-  var SIZE_ORDER = ['PP','P','M','G','GG','XG','XGG','EG','EGG','EXG','G1','G2','G3','G4','G5','G6','G7','U','UN','UNICO','ÚNICO'];
+  var SIZE_ORDER = ['PP','P','P-M','M','M-G','G','GG','GGG','XG','XGG','EG','EGG','EXG','G1','G2','G3','G4','G5','G6','G7','U','UN','UNICO','ÚNICO'];
   function isSize(s) { var u = String(s).toUpperCase(); return SIZE_ORDER.indexOf(u) >= 0 || /^\d{2}$/.test(u); }
   function sizeRank(s) {
     var u = String(s).toUpperCase(), i = SIZE_ORDER.indexOf(u);
@@ -22,7 +22,7 @@
   function parseTitle(title, sku) {
     var t = String(title || '').trim();
     var m = t.match(/^(.*?)\s*\(([^()]*)\)\s*$/);
-    if (!m) return { name: t || sku, color: '—', size: sku };
+    if (!m) return { name: t || sku, color: '—', size: sku, noParen: true };
     var name = m[1].replace(/[\s\-–—:]+$/, '').trim();
     var parts = m[2].split(',').map(function (x) { return x.trim(); }).filter(Boolean);
     var color = '—', size = '—';
@@ -34,6 +34,47 @@
       else color = p1;
     }
     return { name: name || sku, color: color === '—' ? color : titleCase(color), size: size.toUpperCase() };
+  }
+
+  var SKU_COR = {'002':'Preto','004':'Verde','005':'Azul','006':'Pink','007':'Areia','008':'Rosa','010':'Branco','011':'Laranja','013':'Lilás','014':'Vermelho','017':'Roxo','018':'Rosa','019':'Caqui','021':'Amarelo','025':'Linho','027':'Terra Cota','028':'Creme','029':'Bege','030':'Cinza','035':'Azul Marinho','037':'Marrom','045':'Marrom Claro','054':'Marrom Escuro','081':'Bege','084':'Marsala','085':'Grafite','114':'Salmão','116':'Pêssego','123':'Marrom','124':'Off','126':'Salmão','144':'Off-white','157':'Estan Azul','158':'Estan Vermelho','163':'Chocolate','169':'Verde Claro','170':'Verde Menta','199':'Azul Novo','251':'Azul Claro'};
+  var SKU_TAM = {'44':'44','46':'46','48':'48','50':'50','52':'52','61':'P','62':'M','63':'G','64':'GG','66':'G1','67':'G2','68':'G3','69':'G4','70':'G5','71':'G6','72':'G7'};
+  function decodeSku(sku) {
+    if (!/^\d{10}$/.test(sku)) return { color: '—', size: sku };
+    var c = sku.slice(5, 8), s = sku.slice(8, 10);
+    return { color: SKU_COR[c] || ('Cor ' + c), size: SKU_TAM[s] || ('Tam. ' + s) };
+  }
+  function refineNoParen(recs, plen) {
+    var SEP = /^[-–—:|\/,]+$/, by = {};
+    recs.forEach(function (r) { if (r.noParen) { var k = r.sku.slice(0, plen); (by[k] = by[k] || []).push(r); } });
+    Object.keys(by).forEach(function (k) {
+      var list = by[k], n = 0;
+      var words = list.map(function (r) { return String(r.title || '').trim().split(/\s+/); });
+      if (list.length > 1) {
+        var min = Math.min.apply(null, words.map(function (w) { return w.length; }));
+        while (n < min && words.every(function (w) { return w[n].toUpperCase() === words[0][n].toUpperCase(); })) n++;
+      }
+      list.forEach(function (r, i) {
+        var w = words[i], nameW, restW;
+        if (list.length > 1) { nameW = w.slice(0, n); restW = w.slice(n); }
+        else {
+          var d = w.lastIndexOf('-');
+          if (d > 0) { nameW = w.slice(0, d); restW = w.slice(d + 1); }
+          else if (w.length > 1 && isSize(w[w.length - 1])) { nameW = w.slice(0, -1); restW = w.slice(-1); }
+          else { nameW = w; restW = []; }
+        }
+        while (nameW.length && SEP.test(nameW[nameW.length - 1])) nameW.pop();
+        var rest = restW.join(' ').replace(/^[-–—:|\/,\s]+|[-–—:|\/,\s]+$/g, '');
+        var color = '—', size = '—', cp = rest.split(/\s*,\s*/);
+        if (cp.length >= 2 && isSize(cp[cp.length - 1])) { size = cp.pop().toUpperCase(); color = titleCase(cp.join(', ')); }
+        else {
+          var rw = rest ? rest.split(/\s+/) : [];
+          if (rw.length && isSize(rw[rw.length - 1])) size = rw.pop().toUpperCase();
+          if (rw.length) color = titleCase(rw.join(' '));
+        }
+        if (color === '—' && size === '—') { var dk = decodeSku(r.sku); color = dk.color; size = dk.size; r.fromSku = true; }
+        r.name = nameW.join(' ') || r.title || r.sku; r.color = color; r.size = size;
+      });
+    });
   }
 
   // ---------- UpSeller ----------
@@ -63,7 +104,7 @@
   function toRec(r) {
     var p = parseTitle(r.skuTitle, r.sku), custo = Number(r.costPrice) || 0, atual = Number(r.onhand) || 0;
     return { sku: r.sku, kit: r.isGroup === 1, wh: r.warehouseName || '', disp: Number(r.available) || 0, atual: atual,
-      value: custo * atual, noCost: !custo && atual > 0, name: p.name, color: p.color, size: p.size };
+      value: custo * atual, noCost: !custo && atual > 0, name: p.name, color: p.color, size: p.size, title: r.skuTitle || '', noParen: !!p.noParen };
   }
 
   function group(recs, metric) {
@@ -155,6 +196,9 @@
   try { state.metric = localStorage.getItem('plump-estoque-metric') === 'atual' ? 'atual' : 'disp'; } catch (e) {}
 
   function grid(p) {
+    if (p.colors.length === 1 && p.colors[0] === '—' && p.sizes.every(function (s) { return /^\d{6,}$/.test(s); })) {
+      return '<p class="nc" style="color:var(--mu);margin:0 0 6px">O título destas variações não traz cor e tamanho. Estoque por SKU:</p><table><tbody>' + p.sizes.map(function (s) { var v = p.cells['—\u0001' + s] || 0; return '<tr><th class="r">' + esc(s) + '</th><td class="' + (v <= 0 ? 'z' : v <= 2 ? 'lo' : '') + '">' + fmtInt(v) + '</td></tr>'; }).join('') + '<tr><th class="r t">Total</th><td class="t">' + fmtInt(p.qty) + '</td></tr></tbody></table>';
+    }
     var h = '<table><thead><tr><th style="text-align:left">Cor \\ Tam.</th>' + p.sizes.map(function (s) { return '<th>' + esc(s) + '</th>'; }).join('') + '<th class="t">Total</th></tr></thead><tbody>';
     var colTot = {}; p.sizes.forEach(function (s) { colTot[s] = 0; });
     p.colors.forEach(function (c) {
@@ -204,6 +248,7 @@
       var all = res.rows.map(toRec);
       state.kits = all.filter(function (r) { return r.kit; }).length;
       state.recs = all.filter(function (r) { return !r.kit; });
+      refineNoParen(state.recs, 5);
       state.when = 'atualizado às ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
       render();
     }).catch(function (e) {
