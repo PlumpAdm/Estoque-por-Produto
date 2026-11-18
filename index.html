@@ -97,6 +97,7 @@ tr.detail td{background:var(--bg);padding:14px 14px 18px 42px;white-space:normal
 .err{color:var(--bad);font-size:14px}
 .live{border:1px solid var(--plum);border-radius:10px;background:var(--plum-soft);padding:14px 16px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}
 .live .src span{max-width:70ch}
+.bmhint{flex-basis:100%;margin:0;font-size:13px;line-height:1.5;color:var(--ink);background:var(--surface);border:1px dashed var(--plum);border-radius:8px;padding:10px 12px}
 .bm{display:inline-block;font-weight:600;font-size:14px;text-decoration:none;border-radius:8px;padding:9px 14px;background:var(--plum);color:var(--on-plum);cursor:grab;white-space:nowrap}
 .nocost{margin:10px 0 0;font-size:13px;color:var(--warn)}
 .warnmark{color:var(--warn);font-weight:700;margin-left:3px;cursor:help}
@@ -121,6 +122,7 @@ tr.detail td{background:var(--bg);padding:14px 14px 18px 42px;white-space:normal
       <span>Arraste o botão para a barra de favoritos do Chrome (Ctrl+Shift+B mostra a barra). Com o UpSeller aberto e logado, clique no favorito: abre um painel onde você digita o SKU, o código ou o nome do produto e vê o estoque na hora, sem exportar.</span>
     </div>
     <a class="bm" href="javascript:(function(){if(location.hostname!=='app.upseller.com'){location.href='https://app.upseller.com/pt/inventory/list?warehouseId=';return}var s=document.createElement('script');s.src='https://plumpadm.github.io/Estoque-por-Produto/painel.js?v='+Date.now();document.body.appendChild(s)})()" title="Arraste para a barra de favoritos">Estoque UpSeller</a>
+    <p class="bmhint" id="bmHint" hidden><b>Esse botão não abre aqui.</b> 1) Aperte Ctrl+Shift+B para mostrar a barra de favoritos. 2) Segure e arraste o botão rosa até a barra. 3) Abra o UpSeller e clique no favorito <b>Estoque UpSeller</b> lá: o painel de busca abre em cima da tela do UpSeller.</p>
   </div>
 
   <div class="drop" id="drop">
@@ -136,7 +138,7 @@ tr.detail td{background:var(--bg);padding:14px 14px 18px 42px;white-space:normal
   </div>
 
   <div class="controls">
-    <input type="search" id="q" placeholder="Buscar por nome ou código" aria-label="Buscar produto">
+    <input type="search" id="q" placeholder="Buscar no arquivo carregado" aria-label="Buscar no arquivo carregado">
     <div class="seg" role="group" aria-label="Quantidade usada">
       <button type="button" id="mDisp" aria-pressed="true">Disponível</button>
       <button type="button" id="mAtual" aria-pressed="false">Estoque atual</button>
@@ -418,6 +420,7 @@ document.addEventListener('drop', e => { const f = [...(e.dataTransfer?.files ||
 function applyTheme(t){ document.documentElement.setAttribute('data-theme', t); $('themeBtn').textContent = t === 'dark' ? '☀ Tema claro' : '☾ Tema escuro'; }
 applyTheme(document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark');
 $('themeBtn').onclick = () => { const t = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'; applyTheme(t); store.set('theme', t); };
+document.querySelector('.bm').addEventListener('click', e => { e.preventDefault(); $('bmHint').hidden = false; $('bmHint').scrollIntoView({block:'nearest'}); });
 setMetric(S.metric === 'atual' ? 'atual' : 'disp');
 refreshWh(); update();
 </script>
