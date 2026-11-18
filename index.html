@@ -95,6 +95,9 @@ tr.detail td{background:var(--bg);padding:14px 14px 18px 42px;white-space:normal
 .empty{padding:36px 16px;text-align:center;color:var(--muted)}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom, 0px));background:var(--ink);color:var(--bg);padding:9px 14px;border-radius:8px;font-size:14px;font-weight:500}
 .err{color:var(--bad);font-size:14px}
+.nocost{margin:10px 0 0;font-size:13px;color:var(--warn)}
+.warnmark{color:var(--warn);font-weight:700;margin-left:3px;cursor:help}
+.grid th:first-child{color:var(--muted);font-size:11px;text-align:left}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
 </style>
 </head>
@@ -186,7 +189,13 @@ function parseTitle(title, sku){
   const parts = m[2].split(',').map(x => x.trim()).filter(Boolean);
   let color = '—', size = '—';
   if (parts.length >= 2){ color = parts.slice(0,-1).join(', '); size = parts[parts.length-1]; }
-  else if (parts.length === 1){ if (isSize(parts[0])) size = parts[0]; else color = parts[0]; }
+  else if (parts.length === 1){
+    const p1 = parts[0];
+    const mm = p1.match(/^(.*?)[\s\/_-]+(\S+)$/);
+    if (isSize(p1)) size = p1;
+    else if (mm && isSize(mm[2])){ color = mm[1].trim(); size = mm[2]; }
+    else color = p1;
+  }
   return { name: name || sku, color: color === '—' ? color : titleCase(color), size: size.toUpperCase() };
 }
 const SIZE_ORDER = ['PP','P','M','G','GG','XG','XGG','EG','EGG','EXG','G1','G2','G3','G4','G5','G6','G7','U','UN','UNICO','ÚNICO'];
@@ -228,7 +237,7 @@ function toRec(a){
   const atual = num(a[5]), custo = num(a[6]);
   const subRaw = String(a[7] ?? '').trim();
   return { sku, title:String(a[1]||''), wh:String(a[2]||'').trim() || '—', ocup:num(a[3]), disp:num(a[4]), atual,
-    value: subRaw !== '' ? num(subRaw) : atual * custo, ...p };
+    value: subRaw !== '' ? num(subRaw) : atual * custo, noCost: subRaw === '' && custo === 0 && atual > 0, ...p };
 }
 
 // ---------- estado ----------
@@ -243,13 +252,13 @@ function group(){
   for (const r of recs){
     const key = r.sku.slice(0, S.prefix);
     let g = map.get(key);
-    if (!g){ g = { code:key, names:new Map(), qty:0, value:0, vars:0, zeros:0, cells:new Map(), colors:new Set(), sizes:new Set(), skus:[] }; map.set(key,g); }
+    if (!g){ g = { code:key, names:new Map(), qty:0, value:0, vars:0, zeros:0, cells:new Map(), colors:new Set(), sizes:new Set(), skus:[], noCost:[] }; map.set(key,g); }
     const q = r[S.metric];
     g.names.set(r.name, (g.names.get(r.name)||0) + 1);
     g.qty += q; g.value += r.value; g.vars++; if (q <= 0) g.zeros++;
     const ck = r.color + '\u0001' + r.size;
     g.cells.set(ck, (g.cells.get(ck)||0) + q);
-    g.colors.add(r.color); g.sizes.add(r.size); g.skus.push(r.sku);
+    g.colors.add(r.color); g.sizes.add(r.size); g.skus.push(r.sku); if (r.noCost) g.noCost.push(`${r.color} ${r.size} (${r.sku})`);
   }
   S.products = [...map.values()].map(g => {
     g.name = [...g.names.entries()].sort((a,b) => b[1]-a[1])[0][0];
@@ -277,7 +286,7 @@ function esc(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt
 function gridHTML(p){
   const sizes = sortSizes([...p.sizes]);
   const colors = [...p.colors].sort((a,b) => a.localeCompare(b,'pt-BR'));
-  let h = '<table class="grid"><thead><tr><th></th>' + sizes.map(s => `<th>${esc(s)}</th>`).join('') + '<th class="tot">Total</th></tr></thead><tbody>';
+  let h = '<table class="grid"><thead><tr><th>Cor \\ Tam.</th>' + sizes.map(s => `<th>${esc(s)}</th>`).join('') + '<th class="tot">Total</th></tr></thead><tbody>';
   const colTot = Object.fromEntries(sizes.map(s => [s,0]));
   for (const c of colors){
     let rt = 0;
@@ -291,7 +300,7 @@ function gridHTML(p){
     h += `<td class="tot">${fmtInt(rt)}</td></tr>`;
   }
   h += '<tr><th class="row tot">Total</th>' + sizes.map(s => `<td class="tot">${fmtInt(colTot[s])}</td>`).join('') + `<td class="tot">${fmtInt(p.qty)}</td></tr>`;
-  h += '</tbody></table><div class="legend"><span><i style="background:var(--bad-bg)"></i>zerado</span><span><i style="background:var(--warn-bg)"></i>1 a 2 peças</span><span>· não existe essa combinação</span></div>';
+  h += '</tbody></table><div class="legend"><span><i style="background:var(--bad-bg)"></i>zerado</span><span><i style="background:var(--warn-bg)"></i>1 a 2 peças</span><span>· não existe essa combinação</span></div>' + (p.noCost.length ? `<p class="nocost">Sem custo médio no UpSeller: ${p.noCost.map(esc).join(', ')}. O valor do produto não inclui essas peças.</p>` : '');
   return h;
 }
 
@@ -310,7 +319,7 @@ function render(){
         <td class="num big">${fmtInt(p.qty)}</td>
         <td class="num">${p.vars}</td>
         <td class="num">${p.zeros ? `<span class="pill ${p.qty > 0 ? 'bad' : 'zero'}">${p.zeros}</span>` : '<span class="pill ok">0</span>'}</td>
-        <td class="num">${fmtBRL(p.value)}</td></tr>` +
+        <td class="num">${fmtBRL(p.value)}${p.noCost.length ? `<span class="warnmark" title="${p.noCost.length} variação(ões) com estoque sem custo médio">*</span>` : ''}</td></tr>` +
         (open ? `<tr class="detail"><td colspan="7">${gridHTML(p)}</td></tr>` : '');
     }).join('');
   }
